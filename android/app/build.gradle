@@ -25,7 +25,7 @@ android {
 
 
 	// Will we have a release signing config?
-	def hasReleaseSigning = props.getProperty('keystore') != null
+	def hasReleaseSigning = false //props.getProperty('keystore') != null
 
 	// Define signingConfigs BEFORE buildTypes (only if we have a keystore)
 	if (hasReleaseSigning) {
