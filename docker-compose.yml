@@ -1,0 +1,91 @@
+# docker-compose.yml
+#
+# Usage:
+#  1) One-time: ensure volumes are writable by uid/gid 1000
+#     docker compose --profile fix up fix-perms --abort-on-container-exit
+#
+#  2) One-time: download Mineclonia into the data volume
+#     docker compose --profile init up get-mineclonia --abort-on-container-exit
+#
+#  3) Start the server
+#     docker compose up -d
+#
+#  4) Tail logs
+#     docker compose logs -f luanti
+
+services:
+  # One-time: fix volume ownership and create ~/.minetest inside data volume
+  fix-perms:
+    image: alpine:3.20
+    profiles: ["fix"]
+    command: >
+      sh -lc '
+        set -e
+        mkdir -p /var/lib/minetest /etc/minetest /var/lib/minetest/.minetest
+        chown -R 1000:1000 /var/lib/minetest /etc/minetest
+        echo "Ownership fixed and ~/.minetest created"
+      '
+    volumes:
+      - luanti-data:/var/lib/minetest
+      - luanti-config:/etc/minetest
+
+  # One-time: download/refresh Mineclonia into /var/lib/minetest/games/mineclonia
+  get-mineclonia:
+    image: alpine:3.20
+    profiles: ["init"]
+    command: >
+      sh -lc '
+        set -e
+        apk add --no-cache curl unzip >/dev/null
+        mkdir -p /var/lib/minetest/games
+        cd /var/lib/minetest/games
+        rm -rf mineclonia mineclonia-*
+        echo "Fetching Mineclonia..."
+        curl -fL -o mineclonia.zip "https://content.eduquest.vip/packages/rubenwardy/mineclonia/download"
+        unzip -q -o mineclonia.zip
+        rm -f mineclonia.zip
+        [ -d mineclonia ] || mv mineclonia-* mineclonia
+        test -f mineclonia/game.conf && echo "Mineclonia ready."
+      '
+    volumes:
+      - luanti-data:/var/lib/minetest
+
+  luanti:
+    # Build from the Dockerfile in this directory; if you already built/tagged, you can keep the image line only.
+    build: .
+    image: luanti-server:local
+    container_name: luanti
+    restart: unless-stopped
+
+    # Run as minetest-compatible uid/gid and ensure HOME points to the data volume
+    user: "1000:1000"
+    environment:
+      HOME: /var/lib/minetest
+
+    # No --server flag; entrypoint is already the server binary (luantiserver)
+    command:
+      [
+        "--world", "/var/lib/minetest/worlds/eduquest",
+        "--gameid", "mineclonia",
+        "--config", "/etc/minetest/minetest.conf"
+      ]
+
+    ports:
+      - "30000:30000/udp"
+      - "30000:30000"
+
+    volumes:
+      - luanti-data:/var/lib/minetest
+      - luanti-config:/etc/minetest
+
+    # Optional healthcheck (passes when TCP or UDP 30000 is listening)
+    healthcheck:
+      test: ["CMD", "sh", "-lc", "ss -u -lnt | grep -q :30000 || ss -lnt | grep -q :30000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  luanti-data:
+  luanti-config:
+
