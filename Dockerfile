@@ -73,6 +73,11 @@ COPY --from=builder /usr/local/bin/luantiserver /usr/local/bin/luantiserver
 COPY --from=builder /usr/local/share/doc/luanti/minetest.conf.example /etc/minetest/minetest.conf
 COPY --from=builder /usr/local/lib/libspatialindex* /usr/local/lib/
 COPY --from=builder /usr/local/lib/libluajit* /usr/local/lib/
+
+RUN mkdir -p /app/share && \
+    rm -rf /app/share/luanti && \
+    ln -s /usr/local/share/luanti /app/share/luanti
+
 USER minetest:minetest
 
 EXPOSE 30000/udp 30000/tcp
